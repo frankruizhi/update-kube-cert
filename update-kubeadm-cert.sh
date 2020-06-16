@@ -121,7 +121,7 @@ cert::update_kubeconf() {
   # get subject from the old certificate
   local subj=$(cert::get_subj ${cert_name})
   cert::gen_cert "${cert_name}" "client" "${subj}" "${CAER_DAYS}"
-  # get certificate base64 code
+  # get certificate base64 code, "-w 0 to disable line wrapping"
   local cert_base64=$(base64 -w 0 ${cert})
 
   # backup kubeconf
@@ -176,7 +176,8 @@ cert::update_etcd_cert() {
   cert::gen_cert "${CART_NAME}" "client" "/O=system:masters/CN=kube-apiserver-etcd-client" "${CAER_DAYS}"
 
   # restart etcd
-  docker ps | awk '/k8s_etcd/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  # docker ps | awk '/k8s_etcd/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  crictl stop $(crictl ps |grep etcd|awk '{print $1}')|| true
   log::info "restarted etcd"
 }
 
@@ -226,11 +227,14 @@ cert::update_master_cert() {
   cert::gen_cert "${CART_NAME}" "client" "/CN=front-proxy-client" "${CAER_DAYS}"
 
   # restart apiserve, controller-manager, scheduler and kubelet
-  docker ps | awk '/k8s_kube-apiserver/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  # docker ps | awk '/k8s_kube-apiserver/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  crictl stop $(crictl ps |grep kube-apiserver|awk '{print $1}') || true
   log::info "restarted kube-apiserver"
-  docker ps | awk '/k8s_kube-controller-manager/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  # docker ps | awk '/k8s_kube-controller-manager/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  crictl stop $(crictl ps |grep kube-controller-manager|awk '{print $1}') || true
   log::info "restarted kube-controller-manager"
-  docker ps | awk '/k8s_kube-scheduler/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  # docker ps | awk '/k8s_kube-scheduler/{print$1}' | xargs -r -I '{}' docker restart {} || true
+  crictl stop $(crictl ps |grep kube-scheduler|awk '{print $1}') || true
   log::info "restarted kube-scheduler"
   systemctl restart kubelet
   log::info "restarted kubelet"
@@ -247,11 +251,11 @@ main() {
 
   case ${node_tpye} in
     etcd)
-	  # update etcd certificates
+      # update etcd certificates
       cert::update_etcd_cert
     ;;
     master)
-	  # update master certificates and kubeconf
+      # update master certificates and kubeconf
       cert::update_master_cert
     ;;
     all)
